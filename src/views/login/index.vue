@@ -1,18 +1,10 @@
 <script lang="ts" setup>
-  import WebGPU from '@/components/web-gpu/index.vue'
-  import { ref } from 'vue'
-
-  const arr = ref<TestItem[]>([
-    {
-      name: '11',
-      age: 1
-    }
-  ])
+import WebArcgis from '@/components/web-arcgis/index.vue'
 </script>
 
 <template>
   <div>
-    <WebGPU />
+    <WebArcgis />
   </div>
 </template>
 
