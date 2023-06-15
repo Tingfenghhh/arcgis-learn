@@ -1,4 +1,4 @@
-interface SingPointItem {
+interface SinglePointItem {
     id: string;
     name: string;
     center: [number, number];
@@ -8,5 +8,5 @@ interface SingPointItem {
 interface PopupData {
     left: number,
     top: number,
-    attributes: SingPointItem
+    attributes: SinglePointItem
 }

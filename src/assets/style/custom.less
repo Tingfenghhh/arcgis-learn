@@ -14,3 +14,67 @@ body {
     --border-radius-medium: 6px;
     --border-radius-large: 6px;
 }
+
+
+
+.hook-modal {
+    .arco-modal-body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 90px;
+        font-weight: bold;
+        font-size: 17px;
+        text-align: center;
+    }
+
+    .arco-modal-footer {
+        button {
+            border-radius: var(--border-radius-large);
+        }
+    }
+}
+
+.arco-modal {
+    padding: 12px 8px;
+    border-radius: 8px;
+
+    &-header {
+        height: 50px;
+        border-bottom: none;
+
+        .arco-modal-title {
+            justify-content: flex-start;
+            font-weight: bold;
+            font-size: 19px;
+        }
+
+        .arco-modal-close-btn {
+            color: #333;
+            transform: scale(1.4);
+        }
+    }
+
+    &-body {
+        min-height: 90px;
+        padding: 10px 15px;
+    }
+
+    &-footer {
+        display: inline-flex;
+        flex-direction: row-reverse;
+        justify-content: center;
+        padding: 20px;
+        border-top: 0;
+
+        >button {
+            min-width: 80px;
+            height: 38px;
+            font-weight: bold;
+
+            &:first-child {
+                margin-left: 55px;
+            }
+        }
+    }
+}

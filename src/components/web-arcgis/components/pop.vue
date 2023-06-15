@@ -1,10 +1,12 @@
 <script lang='ts' setup>
-import { computed, ref } from 'vue';
+import _ from 'lodash'
+import { checkBrowserUA } from '@/utils/checkBrowser'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { IconCloseCircleFill } from '@arco-design/web-vue/es/icon';
 
 interface PopProps {
     title: string,
-    attr: SingPointItem | undefined,
+    attr: SinglePointItem | undefined,
     width: number
     height: number
     left: number
@@ -14,27 +16,41 @@ interface PopProps {
 const emits = defineEmits<{
     (event: 'closePop'): void
 }>()
+
+const ua = ref(checkBrowserUA())
 const props = withDefaults(defineProps<PopProps>(), {
     title: '标题',
-    width: 150,
-    height: 150,
+    width: 450,
+    height: 250,
     left: 0,
     top: 0,
 })
 
 const top = computed(() => {
+    if (ua.value === 'mobile') {
+        return `${(props.top - (props.height + 30))}px`
+    }
     return `${props.top - (props.height + 25)}px`
 })
 
 const left = computed(() => {
+    if (ua.value === 'mobile') {
+        return `${(props.left - (props.width / 2) / 2) - 40}px`
+    }
     return `${props.left - (props.width / 2)}px`
 })
 
 const width = computed(() => {
+    if (ua.value === 'mobile') {
+        return `${props.width / 2}px`
+    }
     return `${props.width}px`
 })
 
 const height = computed(() => {
+    if (ua.value === 'mobile') {
+        return `${props.height}px`
+    }
     return `${props.height}px`
 })
 
@@ -47,12 +63,28 @@ const closePop = () => {
 }
 
 
+onMounted(() => {
+    // 监听浏览器宽度变化
+    window.addEventListener('resize', () => {
+        _.throttle(() => {
+            ua.value = checkBrowserUA()
+        }, 300)
+    })
+})
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', () => {
+        _.throttle(() => {
+            ua.value = checkBrowserUA()
+        }, 300)
+    })
+})
+
 </script>
 
 <template>
     <div class='pop_vue'>
         <!-- header -->
-        <div class='pop_header'>
+        <div class='pop_header' :class="{ mobile_content: ua === 'mobile' ? true : false }">
             <span>{{ title }}</span>
             <a-button type="text" shape="circle" @click="closePop">
                 <template #icon>
@@ -61,8 +93,8 @@ const closePop = () => {
             </a-button>
         </div>
         <!-- content插槽 -->
-        <div class="pop_content">
-            <a-space direction="vertical">
+        <div class="pop_content" :class="{ pop_content_space: ua === 'mobile' ? true : false }">
+            <a-space direction="vertical" :class="{ mobile_content: ua === 'mobile' ? true : false }">
                 <span>名称：{{ props.attr?.name }}</span>
                 <span>id号：{{ props.attr?.id }}</span>
                 <span>经度：{{ props.attr?.center[0] }}</span>
@@ -93,11 +125,13 @@ const closePop = () => {
     font-size: 18px;
     border-radius: 15px;
     box-shadow: 5px 3px 10px 1px rgba(128, 128, 128, 0.566);
-    background-color: white;
+    background-color: rgba(255, 255, 255, 0.661);
+    backdrop-filter: blur(10px);
+    overflow: hidden;
 
     .pop_header {
         height: 30px;
-        border-bottom: 1px solid #ccc;
+        border-bottom: 1px solid #00000000;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -106,8 +140,16 @@ const closePop = () => {
     .pop_content {
         margin-top: 10px;
 
-
     }
+
+    .pop_content_space {
+        overflow-y: scroll;
+    }
+
+    .mobile_content {
+        font-size: 12px;
+    }
+
 
     .pop_footer {
 

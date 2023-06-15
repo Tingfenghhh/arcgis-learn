@@ -1,10 +1,10 @@
 <script lang="ts" setup>
-import WebArcgis from '@/components/web-arcgis/index.vue'
+  import WebArcGis from '@/components/web-arcgis/index.vue'
 </script>
 
 <template>
   <div>
-    <WebArcgis />
+    <WebArcGis />
   </div>
 </template>
 

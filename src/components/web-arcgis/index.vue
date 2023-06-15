@@ -1,14 +1,16 @@
 <script lang="ts" setup>
+import { checkBrowserWebGL2, checkBrowserUAPromise } from '@/utils/checkBrowser'
 import _ from 'lodash'
 import { useRequest } from 'vue-request'
 import { useArcGisStore } from '@/store'
 import { useArcGis } from '@/hooks/useArcGis'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFps } from '@vueuse/core'
 import { Message } from '@arco-design/web-vue'
 import { getChinaJson, getBoundarySource } from '@/apis/map'
 import { MapEnum } from '@/enums/MapEnum'
 import PopVue from "./components/pop.vue"
+import ControlPopVue from "./components/icon-control-pop.vue"
 
 const chinaSources = ref()
 const arcGisStore = useArcGisStore()
@@ -25,9 +27,12 @@ const {
     mapCustomPopup,
     mapCameraHeightChange,
     mapLabelClick,
+    mapLabelVisible,
     mapClickHighlight,
+    getAllCustomLayer,
     removeLineAndArea,
-    removePoint
+    removePoint,
+    mouseOnMove
 } = useArcGis()
 const fps = ref(useFps())
 const { CITY_HEIGHT, CHINA_HEIGHT, PROVINCE_HEIGHT } = MapEnum
@@ -45,7 +50,7 @@ const { data: province, run: initProvince } = useRequest(getBoundarySource, {
 })
 const { data: city, run: initCity } = useRequest(getBoundarySource, {
     manual: true,
-    onError: (error) => {
+    onError: () => {
         Message.error('获取城市边界失败')
         // 清空city
         city.value = null as any
@@ -53,7 +58,7 @@ const { data: city, run: initCity } = useRequest(getBoundarySource, {
 })
 
 // 存储自定义点位
-const customPointArr = ref<string[]>([])
+const customPointArr = ref<SinglePointItem[]>([])
 
 // 视角还原
 const flyToHomeBtn = _.throttle(() => {
@@ -101,8 +106,8 @@ const renderArea = _.throttle(() => {
 const direction = ref<'horizontal' | 'vertical' | undefined>('horizontal')
 
 // 地图加载完毕触发
-mapLoaded((view) => {
-    Message.success('你已完成地图加载和飞行到中国')
+mapLoaded(() => {
+    Message.success('你已完成地图加载和飞行')
     // 绘制边界
     drawLine(chinaSources.value)
 })
@@ -143,7 +148,7 @@ mapLabelClick((e) => {
         flyTo(
             {
                 center: [results.graphic.attributes.longitude, results.graphic.attributes.latitude],
-                zoom: 11
+                zoom: 10
             },
             {
                 duration: 1500
@@ -162,7 +167,7 @@ mapLabelClick((e) => {
         flyTo(
             {
                 center: [results.graphic.attributes.center[0], results.graphic.attributes.center[1]],
-                zoom: 11
+                zoom: 16
             },
             {
                 duration: 1500
@@ -183,22 +188,29 @@ mapLeftClick((e) => {
         flyTo(
             {
                 center: [longitude, latitude],
-                zoom: 11
+                zoom: 16
             },
             {
                 duration: 1500
             }
         ).then(() => {
             // 时间戳(毫秒)
-            const customPoint: SingPointItem = {
+            const customPoint: SinglePointItem = {
                 center: [longitude, latitude],
                 // 时间戳(毫秒)
                 id: `${new Date().getTime()}-singlePoint`,
                 name: '新加点位ID' + `${new Date().getTime()}-singlePoint`,
             }
             drawSinglePoint(customPoint)
-            customPointArr.value.push(customPoint.id)
+            customPointArr.value.push(customPoint)
             arcGisStore.setPopupVisible(false)
+            getAllCustomLayer([...customPointArr.value]).then((res: __esri.Layer[]) => {
+                arcGisStore.setCustomPointArr(res)
+                // mapLabelCluster() 暂时无效
+            }).catch((error) => {
+                console.log(error)
+                throw new Error(error)
+            })
         })
     }
 })
@@ -211,10 +223,12 @@ const closePop = () => {
 // 删除自定义点位
 const deleteCustomArr = () => {
     if (customPointArr.value.length) {
-        customPointArr.value.forEach((item) => {
-            removePoint(null, item)
+        customPointArr.value.forEach((item: SinglePointItem) => {
+            removePoint(null, item.id)
         })
         customPointArr.value = []
+        arcGisStore.setCustomPointArr([])
+        arcGisStore.setPopupVisible(false)
         Message.success('删除自定义点位成功')
         return
     }
@@ -229,49 +243,63 @@ mapCameraHeightChange((event) => {
 
     if (z > CITY_HEIGHT) {
         arcGisStore.setPopupVisible(false)
+        customPointArr.value && mapLabelVisible(customPointArr.value, false)
     }
 
     if (z >= CHINA_HEIGHT) {
         closeHighLight(true)
         drawLine(chinaSources.value)
+        customPointArr.value && mapLabelVisible(customPointArr.value, false)
         return
     }
     if (CITY_HEIGHT < z && z < PROVINCE_HEIGHT) {
         closeHighLight(true)
         province.value && drawLine(province.value.data)
+        customPointArr.value && mapLabelVisible(customPointArr.value, false)
         return
     }
     if (CITY_HEIGHT >= z) {
         city.value && drawLine(city.value.data)
+        customPointArr.value && mapLabelVisible(customPointArr.value, true)
         return
     }
 })
 
 onMounted(() => {
-    // 初始化地图
-    initMap('viewDiv')
-        .then(() => {
-            Message.success('地图加载完成')
-        })
-        .catch((error) => {
-            Message.error('地图加载失败')
-            throw new Error(error)
-        })
-    // 根据屏幕宽度先设置方向
-    if (window.innerWidth < 768) {
-        direction.value = 'vertical'
-    } else {
-        direction.value = 'horizontal'
-    }
+    checkBrowserWebGL2().then(() => {
+        // 初始化地图
+        initMap('viewDiv')
+            .then(() => {
+                Message.success('地图加载完成')
+            })
+            .catch((error) => {
+                Message.error('地图加载失败')
+                throw new Error(error)
+            })
 
-    // 监听浏览器宽度变化
-    window.addEventListener('resize', () => {
-        if (window.innerWidth < 768) {
-            direction.value = 'vertical'
-        } else {
-            direction.value = 'horizontal'
-        }
+        checkBrowserUAPromise().then((res: string) => {
+            // 根据屏幕宽度先设置ios端的地图方向
+            if (res === "mobile") {
+                direction.value = 'vertical'
+            } else {
+                direction.value = 'horizontal'
+            }
+            // 监听浏览器宽度变化
+            window.addEventListener('resize', () => {
+                if (document.documentElement.clientWidth < 768) {
+                    direction.value = 'vertical'
+                } else {
+                    direction.value = 'horizontal'
+                }
+            })
+        })
+
+    }).catch((error) => {
+        Message.error('当前浏览器不支持WebGL2')
+        throw new Error(error)
     })
+
+
 })
 
 // 销毁地图
@@ -280,6 +308,11 @@ onBeforeUnmount(() => {
         console.log('销毁地图，清除事件')
         arcGisStore.ArcGisView.destroy()
         clearEvent()
+    }
+    // 销毁图层的鼠标移动事件监听
+    if (mouseOnMove) {
+        const mouseDelete: IHandle = mouseOnMove as IHandle
+        mouseDelete.remove()
     }
     // 移除浏览器宽度变化监听
     window.removeEventListener('resize', () => {
@@ -306,6 +339,11 @@ onBeforeUnmount(() => {
         <PopVue v-if="arcGisStore.popupVisible" :title="'测试弹窗'" :width="450" :height="250" :top="arcGisStore.popupData?.top"
             :left="arcGisStore.popupData?.left" :attr="arcGisStore.popupData?.attributes" @closePop="closePop">
         </PopVue>
+        <!-- 自定义操作弹窗 -->
+        <ControlPopVue v-if="arcGisStore.popupVisible" :width="125" :height="150" :top="arcGisStore.popupData?.top"
+            :left="arcGisStore.popupData?.left" :attr="arcGisStore.popupData?.attributes" @closePop="closePop">
+        </ControlPopVue>
+
 
     </div>
 </template>
@@ -316,11 +354,16 @@ onBeforeUnmount(() => {
     height: 100%;
     position: relative;
     overflow: hidden;
+    background: radial-gradient(#12bff2, #045c8a) !important; // 作用于地图背景 充当星空色
 }
 
 #viewDiv {
     width: 100%;
     height: 100vh;
+
+    &>canvas {
+        filter: saturate(1.2) drop-shadow(0 0 20px white);
+    }
 }
 
 .map-fps {

@@ -9,7 +9,12 @@ export const useArcGisStore = defineStore("useArcGisStore", {
         mapEmitter: mitt(),
         popupVisible: false,
         popupData: null,
-        coordinate: null
+        coordinate: null,
+        customPointArr: null,
+        isMove: false,
+        nowMoveLayer: null,
+        oldLayerAttrData: undefined
+
     }),
     getters: {},
     persist: true,
@@ -25,6 +30,18 @@ export const useArcGisStore = defineStore("useArcGisStore", {
         },
         setCoordinate(coordinate: any) {
             this.coordinate = coordinate
+        },
+        setCustomPointArr(arr: __esri.Layer[] | null) {
+            this.customPointArr = arr
+        },
+        setIsMove(isMove: boolean) {
+            this.isMove = isMove
+        },
+        setNowMoveLayer(layer: __esri.Layer | null) {
+            this.nowMoveLayer = layer
+        },
+        setOldLayerAttrData(data: SinglePointItem | undefined) {
+            this.oldLayerAttrData = data
         }
 
     },

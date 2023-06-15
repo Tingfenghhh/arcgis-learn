@@ -37,5 +37,6 @@ module.exports = {
         'vue/multi-word-component-names': 0,
         'no-undef': 0,
         'no-useless-escape': 0,
+        '@typescript-eslint/no-explicit-any': 0
     }
 }

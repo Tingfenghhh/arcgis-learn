@@ -4,4 +4,8 @@ export interface ArcGisStore {
     popupVisible: boolean
     popupData: PopupData | null
     coordinate: any
+    customPointArr: __esri.Layer[] | null
+    isMove: boolean,
+    nowMoveLayer: __esri.Layer | null
+    oldLayerAttrData: SinglePointItem | undefined
 }

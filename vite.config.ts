@@ -3,7 +3,8 @@ import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 import UnoCSS from 'unocss/vite'
 import vueJsx from '@vitejs/plugin-vue-jsx'
-import { presetAttributify, presetUno } from "unocss";import viteCompression from 'vite-plugin-compression'
+import { presetAttributify, presetUno } from "unocss"; import viteCompression from 'vite-plugin-compression'
+import eslint from 'vite-plugin-eslint'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -19,6 +20,11 @@ export default defineConfig({
     threshold: 10240,
     algorithm: 'gzip',
     ext: '.gz',
+  }),
+  eslint({
+    cache: false,
+    include: ['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.vue'],
+    exclude: ['node_modules']
   })],
   server: {
     host: '0.0.0.0',
