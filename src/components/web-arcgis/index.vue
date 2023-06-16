@@ -1,10 +1,11 @@
 <script lang="ts" setup>
+import { transString } from '@/utils/fromCodeGetName'
 import { checkBrowserWebGL2, checkBrowserUAPromise } from '@/utils/checkBrowser'
 import _ from 'lodash'
 import { useRequest } from 'vue-request'
 import { useArcGisStore } from '@/store'
 import { useArcGis } from '@/hooks/useArcGis'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFps } from '@vueuse/core'
 import { Message } from '@arco-design/web-vue'
 import { getChinaJson, getBoundarySource } from '@/apis/map'
@@ -29,6 +30,8 @@ const {
     mapLabelClick,
     mapLabelVisible,
     mapClickHighlight,
+    mapClickOfRight,
+    moveIconConfirm,
     getAllCustomLayer,
     removeLineAndArea,
     removePoint,
@@ -41,6 +44,7 @@ const getChinaJsonFun = async (name: string) => {
     const data = await getChinaJson(name)
     return data.data
 }
+
 getChinaJsonFun('100000').then((res) => {
     chinaSources.value = res
 })
@@ -48,6 +52,7 @@ getChinaJsonFun('100000').then((res) => {
 const { data: province, run: initProvince } = useRequest(getBoundarySource, {
     manual: true
 })
+
 const { data: city, run: initCity } = useRequest(getBoundarySource, {
     manual: true,
     onError: () => {
@@ -105,15 +110,44 @@ const renderArea = _.throttle(() => {
 // 控件方向
 const direction = ref<'horizontal' | 'vertical' | undefined>('horizontal')
 
+// 关闭自定义弹窗
+const closePop = () => {
+    arcGisStore.setPopupVisible(false)
+}
+
+// 删除自定义点位
+const deleteCustomArr = () => {
+    if (customPointArr.value.length) {
+        customPointArr.value.forEach((item: SinglePointItem) => {
+            removePoint(null, item.id)
+        })
+        customPointArr.value = []
+        arcGisStore.setCustomPointArr([])
+        arcGisStore.setPopupVisible(false)
+        Message.success('删除自定义点位成功')
+        return
+    }
+    Message.info('暂无自定义点位')
+}
+
+// 当前选中的区域名称
+const areaNmae = computed(() => {
+    if (arcGisStore.nowSelectAreaName !== null) {
+        return transString(arcGisStore.nowSelectAreaName).join('--')
+    }
+    return "全国"
+})
+
 // 地图加载完毕触发
-mapLoaded(() => {
+mapLoaded((e: __esri.SceneView) => {
+    console.log(e)
     Message.success('你已完成地图加载和飞行')
     // 绘制边界
     drawLine(chinaSources.value)
 })
 
 // 监听地图点击的标签事件触发
-mapLabelClick((e) => {
+mapLabelClick((e: __esri.SceneViewHitTestResult) => {
     if (!e.results.length) return
     const results = e.results[0]
     if (results.type === 'graphic' && results.graphic.attributes !== null && results.graphic.attributes.adcode) {
@@ -123,6 +157,8 @@ mapLabelClick((e) => {
             id: 'info',
             content: '当前点击的是：' + results.graphic.attributes.name
         })
+        // 存储当前选中的adcode
+        arcGisStore.setNowSelectAreaName(adcode)
         // 根据adcode获取省份边界
         const codeAffter = String(adcode).slice(2, 6)
         if (codeAffter === '0000') {
@@ -179,9 +215,8 @@ mapLabelClick((e) => {
     }
 })
 
-
-//   监听地图普通点击事件
-mapLeftClick((e) => {
+// 监听地图普通点击事件
+mapLeftClick((e: __esri.ViewClickEvent) => {
     if (e) {
         const { longitude, latitude } = e.mapPoint
         console.log(longitude, latitude, '普通点击事件,并在地图上打点')
@@ -215,27 +250,15 @@ mapLeftClick((e) => {
     }
 })
 
-// 关闭自定义弹窗
-const closePop = () => {
-    arcGisStore.setPopupVisible(false)
-}
-
-// 删除自定义点位
-const deleteCustomArr = () => {
-    if (customPointArr.value.length) {
-        customPointArr.value.forEach((item: SinglePointItem) => {
-            removePoint(null, item.id)
-        })
-        customPointArr.value = []
-        arcGisStore.setCustomPointArr([])
-        arcGisStore.setPopupVisible(false)
-        Message.success('删除自定义点位成功')
-        return
+// 监听地图右键点击事件
+mapClickOfRight((e: __esri.ViewClickEvent) => {
+    console.log(e)
+    closePop()
+    if (arcGisStore.isMove) {
+        // 右键单击时，如果是移动图标，就取消移动图标
+        moveIconConfirm(true)
     }
-    Message.info('暂无自定义点位')
-}
-
-
+})
 
 // 监听地图缩放
 mapCameraHeightChange((event) => {
@@ -247,6 +270,7 @@ mapCameraHeightChange((event) => {
     }
 
     if (z >= CHINA_HEIGHT) {
+        arcGisStore.setNowSelectAreaName(null)
         closeHighLight(true)
         drawLine(chinaSources.value)
         customPointArr.value && mapLabelVisible(customPointArr.value, false)
@@ -335,6 +359,11 @@ onBeforeUnmount(() => {
             </a-space>
         </div>
 
+        <!-- 显示当前点击的区域 -->
+        <div class="area-name">
+            {{ areaNmae }}
+        </div>
+
         <!-- 自定义弹窗 -->
         <PopVue v-if="arcGisStore.popupVisible" :title="'测试弹窗'" :width="450" :height="250" :top="arcGisStore.popupData?.top"
             :left="arcGisStore.popupData?.left" :attr="arcGisStore.popupData?.attributes" @closePop="closePop">
@@ -376,7 +405,24 @@ onBeforeUnmount(() => {
     backdrop-filter: blur(10px);
     text-align: center;
     border-radius: 5px;
-    // color: rgb(254, 219, 15);
+}
+
+.area-name {
+    position: absolute;
+    width: auto;
+    box-sizing: border-box;
+    padding: 5px 10px;
+    top: 10px;
+    right: 150px;
+    height: 28px;
+    font-size: 14px;
+    background-color: rgba(255, 255, 255, 0.662);
+    backdrop-filter: blur(10px);
+    text-align: center;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .contorl-box {

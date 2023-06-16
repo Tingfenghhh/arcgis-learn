@@ -6,8 +6,9 @@ import { IconDragArrow, IconDelete, IconClose } from '@arco-design/web-vue/es/ic
 import { useArcGis } from '@/hooks/useArcGis'
 import { useArcGisStore } from "@/store"
 import SceneView from '@arcgis/core/views/SceneView' // 引入ArcGis地图视图
+import { Message } from '@arco-design/web-vue'
 
-interface PopProps {
+interface ControlPopProps {
     attr: SinglePointItem | undefined
     width: number
     height: number
@@ -22,7 +23,7 @@ const emits = defineEmits<{
     (event: 'closePop'): void
 }>()
 const ua = ref(checkBrowserUA())
-const props = withDefaults(defineProps<PopProps>(), {
+const props = withDefaults(defineProps<ControlPopProps>(), {
     title: '标题',
     width: 125,
     height: 150,
@@ -76,6 +77,7 @@ const moveBtn = () => {
 
 const removeBtn = () => {
     props.attr && removePoint(null, props.attr.id)
+    Message.success('删除成功')
     emits('closePop')
 }
 
@@ -149,6 +151,8 @@ onBeforeUnmount(() => {
     box-shadow: 5px 3px 10px 1px rgba(128, 128, 128, 0.566);
     background-color: rgba(255, 255, 255, 0.661);
     backdrop-filter: blur(10px);
+    // 移动端模糊
+    -webkit-backdrop-filter: blur(10px);
 
     .pop_footer {
         margin-top: 10px;

@@ -13,6 +13,7 @@ import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol' // �
 import TextSymbol from '@arcgis/core/symbols/TextSymbol' // 引入ArcGis文字标记
 import Graphic from '@arcgis/core/Graphic' // 引入ArcGis标记
 import Point from '@arcgis/core/geometry/Point' // 引入ArcGis点
+import Color from '@arcgis/core/Color' // 引入ArcGis颜色
 import __esri from '@arcgis/core/intl' // 引入ArcGis的TS所有类型合集
 import { Message } from '@arco-design/web-vue'
 import location from '@/assets/images/accepted.png'
@@ -36,6 +37,12 @@ const CLICK = Symbol('CLICK')
 const LEFT_CLICK = Symbol('LEFT_CLICK')
 
 /**
+ * 右键点击事件(只包含地图点)
+ */
+
+const RIGHT_CLICK = Symbol('RIGHT_CLICK')
+
+/**
  * 摄像机高度变化事件
  */
 const CAMREAHEIGHT = Symbol('camera.position.z')
@@ -45,8 +52,8 @@ type ClearList = 'CLICK' | 'MOUSEMOVE' | 'RIGHTCLICK'
 export const useArcGis = () => {
     const { ModalInfo } = useModal()
     const ArcGisStore = useArcGisStore()
-    const { mapEmitter, popupVisible, popupData, customPointArr, isMove, ArcGisView, nowMoveLayer, oldLayerAttrData } = storeToRefs(ArcGisStore)
-    const { setArcGisView, setPopupVisible, setPopupData, setIsMove, setNowMoveLayer, setOldLayerAttrData } = ArcGisStore
+    const { mapEmitter, popupVisible, popupData, customPointArr, isMove, ArcGisView, nowMoveLayer, oldLayerAttrData, moveConfirmCenter } = storeToRefs(ArcGisStore)
+    const { setArcGisView, setPopupVisible, setPopupData, setIsMove, setNowMoveLayer, setOldLayerAttrData, setMoveConfirmCenter } = ArcGisStore
     const { MAXIMUMZOOMDISTANCE, MINIMUMZOOMDISTANCE, DEFAULT_LONGITUDE, DEFAULT_LATITUDE, BOUNDARY_CITY_HEIGHT, CITY_HEIGHT } = MapEnum
     let viewScene: SceneView | null = null // 地图视图
     let clickEvent: __esri.ViewClickEvent | null = null // 当前点击的实体或者地图点
@@ -122,6 +129,17 @@ export const useArcGis = () => {
                         type: "virtual"
                     }
                 },
+                // 设置全局选中时的高亮样式
+                highlightOptions: {
+                    color: new Color({
+                        r: 245,
+                        g: 215,
+                        b: 39,
+                        a: 1
+                    }),
+                    haloOpacity: 0.9,
+                    fillOpacity: 0.2
+                },
             })
             viewScene = view
             setArcGisView(view)
@@ -130,49 +148,55 @@ export const useArcGis = () => {
             view.on(
                 'click',
                 _.throttle(async (event: __esri.ViewClickEvent) => {
+                    const clickType = event.button // 0左键 1中键 2右键
                     // hitTest 方法在点击位置上如果存在 Graphic（线或点），即可获取 Graphic 对象的整个数据
-                    view.hitTest(event).then((response: __esri.SceneViewHitTestResult) => {
-                        try {
-                            if (response.results.length > 0) {
-                                if (isMove.value) {
-                                    moveIconConfirm()
-                                    return
-                                }
-                                setPopupVisible(false)
-                                // 利用点击到的图标经纬度（这里的经纬度是渲染时json里面的或者是第一次点击地图添加图标时的经纬度数据，和再次点击图标时的经纬度有差异），替换event.mapPoint里面的经纬度，以减小误差 （不替换经纬度数据会导致弹窗位置差异很大）
-                                // 这里处理的是默认弹窗
-                                const res = response.results[0] as __esri.SceneViewGraphicHit
-                                const { longitude, latitude } = res.graphic.attributes
-                                const { type } = res.graphic.attributes
-                                // 单独点到的点或者线
-                                if (type !== 'polygon') {
-                                    event.mapPoint.longitude = longitude
-                                    event.mapPoint.latitude = latitude
-                                    clickEvent = event
-                                    // 点击到的Graphic（线或点）
-                                    mapEmitter.value.emit(CLICK, response)
+                    if (clickType === 0) {
+                        view.hitTest(event).then((response: __esri.SceneViewHitTestResult) => {
+                            try {
+                                if (response.results.length > 0) {
+                                    if (isMove.value) {
+                                        moveIconConfirm()
+                                        return
+                                    }
+                                    setPopupVisible(false)
+                                    // 利用点击到的图标经纬度（这里的经纬度是渲染时json里面的或者是第一次点击地图添加图标时的经纬度数据，和再次点击图标时的经纬度有差异），替换event.mapPoint里面的经纬度，以减小误差 （不替换经纬度数据会导致弹窗位置差异很大）
+                                    // 这里处理的是默认弹窗
+                                    const res = response.results[0] as __esri.SceneViewGraphicHit
+                                    const { longitude, latitude } = res.graphic.attributes
+                                    const { type } = res.graphic.attributes
+                                    // 单独点到的点或者线
+                                    if (type !== 'polygon') {
+                                        event.mapPoint.longitude = longitude
+                                        event.mapPoint.latitude = latitude
+                                        clickEvent = event
+                                        // 点击到的Graphic（线或点）
+                                        mapEmitter.value.emit(CLICK, response)
+                                    } else {
+                                        // 点到了面，但是要触发普通地图点击事件 
+                                        closeHighLight(true)
+                                        mapEmitter.value.emit(LEFT_CLICK, event)
+                                        clickEvent = event
+                                        setPopupVisible(false)
+                                    }
                                 } else {
-                                    // 点到了面，但是要触发普通地图点击事件 
+                                    if (isMove.value) {
+                                        moveIconConfirm()
+                                        return
+                                    }
+                                    // 普通地图点击事件 可获取点击位置的经纬度
                                     closeHighLight(true)
                                     mapEmitter.value.emit(LEFT_CLICK, event)
                                     clickEvent = event
                                     setPopupVisible(false)
                                 }
-                            } else {
-                                if (isMove.value) {
-                                    moveIconConfirm()
-                                    return
-                                }
-                                // 普通地图点击事件 可获取点击位置的经纬度
-                                closeHighLight(true)
-                                mapEmitter.value.emit(LEFT_CLICK, event)
-                                clickEvent = event
-                                setPopupVisible(false)
+                            } catch (error) {
+                                throw new Error(error as string)
                             }
-                        } catch (error) {
-                            throw new Error(error as string)
-                        }
-                    })
+                        })
+                    } else if (clickType === 2) {
+                        // 右键点击事件
+                        mapEmitter.value.emit(RIGHT_CLICK, event)
+                    }
                 }, 500)
             )
 
@@ -308,13 +332,12 @@ export const useArcGis = () => {
                     })
             })
 
-            // 监听所有图层中任意一个图层销毁
+
+            // 监听所有图层中任意一个图层销毁(包括删除边界线，删除自定义图标，删除自定义图层)
             view.on("layerview-destroy", () => {
                 // 图层销毁删除鼠标移动事件监听
                 // mouseOnMove.remove()
             })
-
-
 
             return Promise.resolve()
         } catch (error) {
@@ -394,7 +417,7 @@ export const useArcGis = () => {
     }
 
     /**
-     * 地图标签点击
+     * 地图标签点击（左键）
      * @param handler
      * @date 2023/6/8
      */
@@ -437,13 +460,28 @@ export const useArcGis = () => {
     }
 
     /**
-     * 地图普通点击事件
+     * 地图普通点击事件(左键)
      * @param handler 
      * @date 2023/6/9
      */
     const mapLeftClick = (handler: Handler<__esri.ViewClickEvent>) => {
         try {
             mapEmitter.value.on(LEFT_CLICK, (event: __esri.ViewClickEvent) => {
+                handler(event)
+            })
+        } catch (error) {
+            throw new Error(error as string)
+        }
+    }
+
+    /**
+     * 地图点击（右键）
+     * @param handler 
+     * @date 2023/6/16
+     */
+    const mapClickOfRight = (handler: Handler<__esri.ViewClickEvent>) => {
+        try {
+            mapEmitter.value.on(RIGHT_CLICK, (event: __esri.ViewClickEvent) => {
                 handler(event)
             })
         } catch (error) {
@@ -497,6 +535,7 @@ export const useArcGis = () => {
                 setOldLayerAttrData(oldLayerAttrData)
                 setNowMoveLayer(layer)
                 setIsMove(true)
+                Message.info('移动选择位置，左键确定，右键取消')
             }
 
         } catch (error) {
@@ -519,7 +558,7 @@ export const useArcGis = () => {
             const id = toRaw(nowMoveLayer.value).id
             const layer = viewScene.map.findLayerById(id) as __esri.GraphicsLayer
             if (layer) {
-                // 通过删除图层再添加图层的方式实现图标移动 (不推荐)
+                // 通过删除图层再添加图层的方式实现图标移动
                 viewScene.map.remove(layer)
                 setPopupVisible(false)
                 const longitude = event.results[0].mapPoint.longitude
@@ -529,6 +568,8 @@ export const useArcGis = () => {
                     center: [longitude, latitude],
                     name: layer.graphics.getItemAt(0).attributes.name,
                 }
+                // 存储最后一次移动的经纬度
+                setMoveConfirmCenter([longitude, latitude])
                 drawSinglePoint(PointData)
             }
         } catch (error) {
@@ -542,8 +583,21 @@ export const useArcGis = () => {
      * @date 2023/6/15
      * @returns 
      */
-    const moveIconConfirm = () => {
+    const moveIconConfirm = (confirm?: boolean) => {
         try {
+            // confirm 如果等于true,则表示取消移动, 不传则进行弹窗判断
+            if (confirm) {
+                moveIconCancelDraw().then(() => {
+                    setIsMove(false)
+                    setNowMoveLayer(null)
+                    setOldLayerAttrData(undefined)
+                    Message.info({
+                        id: 'move-info',
+                        content: '取消移动，图标已经还原'
+                    })
+                })
+                return
+            }
             ModalInfo({
                 title: '提示',
                 content: '是否将图标移动到此处？',
@@ -551,36 +605,32 @@ export const useArcGis = () => {
                 setIsMove(false)
                 setNowMoveLayer(null)
                 setOldLayerAttrData(undefined)
-                Message.success({
-                    id: 'move-info',
-                    content: '移动成功'
-                })
-            }).catch(() => {
-                if (!isMove.value) return
-                if (!nowMoveLayer.value) return
-                if (!viewScene) return
-                if (!oldLayerAttrData.value) return
-                const id = toRaw(nowMoveLayer.value).id
-                const layer = viewScene.map.findLayerById(id) as __esri.GraphicsLayer
-                if (layer) {
-                    // 通过删除图层再添加图层的方式实现图标移动 (不推荐)
-                    viewScene.map.remove(layer)
-                    setPopupVisible(false)
-                    const longitude = oldLayerAttrData.value.center[0]
-                    const latitude = oldLayerAttrData.value.center[1]
-                    const PointData: SinglePointItem = {
-                        id: layer.id,
-                        center: [longitude, latitude],
-                        name: layer.graphics.getItemAt(0).attributes.name,
+                // 飞向移动的位置
+                flyTo(
+                    {
+                        center: toRaw(moveConfirmCenter.value),
+                        zoom: 16
+                    },
+                    {
+                        duration: 1500
                     }
-                    drawSinglePoint(PointData)
-                }
-                setIsMove(false)
-                setNowMoveLayer(null)
-                setOldLayerAttrData(undefined)
-                Message.info({
-                    id: 'move-info',
-                    content: '取消移动，图标已经还原'
+                ).then(() => {
+                    setMoveConfirmCenter(null)
+                    Message.success({
+                        id: 'move-info',
+                        content: '移动成功'
+                    })
+                })
+
+            }).catch(() => {
+                moveIconCancelDraw().then(() => {
+                    setIsMove(false)
+                    setNowMoveLayer(null)
+                    setOldLayerAttrData(undefined)
+                    Message.info({
+                        id: 'move-info',
+                        content: '取消移动，图标已经还原'
+                    })
                 })
             })
             return
@@ -589,6 +639,39 @@ export const useArcGis = () => {
         }
     }
 
+
+    /**
+     * 取消移动时渲染图标
+     * @returns 
+     * @date 2023/6/16
+     */
+    const moveIconCancelDraw = (): Promise<void> => {
+        try {
+            if (!isMove.value) return Promise.reject()
+            if (!nowMoveLayer.value) return Promise.reject()
+            if (!viewScene) return Promise.reject()
+            if (!oldLayerAttrData.value) return Promise.reject()
+            const id = toRaw(nowMoveLayer.value).id
+            const layer = viewScene.map.findLayerById(id) as __esri.GraphicsLayer
+            if (layer) {
+                // 通过删除图层再添加图层的方式实现图标移动
+                viewScene.map.remove(layer)
+                setPopupVisible(false)
+                const longitude = oldLayerAttrData.value.center[0]
+                const latitude = oldLayerAttrData.value.center[1]
+                const PointData: SinglePointItem = {
+                    id: layer.id,
+                    center: [longitude, latitude],
+                    name: layer.graphics.getItemAt(0).attributes.name,
+                }
+                drawSinglePoint(PointData)
+                return Promise.resolve()
+            }
+            return Promise.reject()
+        } catch (error) {
+            throw new Error(error as string)
+        }
+    }
 
 
     /**
@@ -684,6 +767,8 @@ export const useArcGis = () => {
             if (!results) return
             if (nowSingePointHighLight !== null) {
                 nowSingePointHighLight.remove()
+                // 改变鼠标样式
+                viewScene && (viewScene.container.style.cursor = 'default')
             }
             const { graphic } = results.results[0] as any
             const isArea = graphic.attributes.adcode
@@ -691,6 +776,8 @@ export const useArcGis = () => {
             if (graphic && graphic.layer) {
                 viewScene.whenLayerView(graphic.layer).then((layerView) => {
                     nowSingePointHighLight = layerView.highlight(graphic);
+                    // 改变鼠标样式
+                    viewScene && (viewScene.container.style.cursor = 'pointer')
                 })
             }
         } catch (error) {
@@ -711,11 +798,15 @@ export const useArcGis = () => {
             if (!results) return
             if (nowSingePointHighLight !== null) {
                 nowSingePointHighLight.remove()
+                // 改变鼠标样式
+                viewScene && (viewScene.container.style.cursor = 'default')
             }
             const graphic = results.graphic
             if (graphic) {
                 viewScene.whenLayerView(graphic.layer).then((layerView) => {
                     nowSingePointHighLight = layerView.highlight(graphic);
+                    // 改变鼠标样式
+                    viewScene && (viewScene.container.style.cursor = 'pointer')
                 })
             }
         } catch (error) {
@@ -733,6 +824,8 @@ export const useArcGis = () => {
             if (!nowSingePointHighLight) return
             if (status) {
                 nowSingePointHighLight.remove()
+                // 改变鼠标样式
+                viewScene && (viewScene.container.style.cursor = 'default')
             }
         } catch (error) {
             throw new Error(error as string)
@@ -769,7 +862,7 @@ export const useArcGis = () => {
                     size: 12,
                     weight: 'bold'
                 },
-                backgroundColor: 'rgba(0,0,0,0.5)',
+                backgroundColor: 'rgba(105, 161, 251,0.5)',
             })
             // 创建文字的图层
             const textGraphic = new Graphic({
@@ -834,7 +927,7 @@ export const useArcGis = () => {
                 // 创建线的样式
                 const lineSymbol = {
                     type: 'simple-line',
-                    color: [254, 219, 15],
+                    color: [10, 135, 183],
                     width: 2
                 }
                 // 创建线的图层
@@ -855,7 +948,7 @@ export const useArcGis = () => {
                         size: 12,
                         weight: 'bold'
                     },
-                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    backgroundColor: 'rgba(105, 161, 251,0.5)',
                 })
                 // 创建文字的图层
                 const labelGraphic = new Graphic({
@@ -903,7 +996,7 @@ export const useArcGis = () => {
                     type: "simple-fill",
                     color: [71, 106, 120, 0.2],
                     outline: {
-                        color: [255, 255, 255],
+                        color: [10, 135, 183],
                         width: 1
                     }
                 };
@@ -1044,6 +1137,7 @@ export const useArcGis = () => {
     }
 
     return {
+        // 方法
         initMap,
         flyTo,
         mapLoaded,
@@ -1053,19 +1147,21 @@ export const useArcGis = () => {
         closeHighLight,
         drawLine,
         drawSinglePoint,
+        iconMove,
         mapLabelClick,
         mapLeftClick,
+        mapClickOfRight,
         mapPopup,
         mapCustomPopup,
         mapCameraHeightChange,
         mapLabelCluster,
         mapLabelVisible,
         mapClickHighlight,
+        moveIconConfirm,
         getAllCustomLayer,
         removeLineAndArea,
         removePoint,
-        iconMove,
-        moveIconConfirm,
+        // 变量参数
         mouseOnMove,
         mouseOnMovePoint
     }

@@ -8,4 +8,6 @@ export interface ArcGisStore {
     isMove: boolean,
     nowMoveLayer: __esri.Layer | null
     oldLayerAttrData: SinglePointItem | undefined
+    moveConfirmCenter: [number, number] | null
+    nowSelectAreaName: number | null
 }

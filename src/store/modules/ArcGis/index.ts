@@ -13,8 +13,9 @@ export const useArcGisStore = defineStore("useArcGisStore", {
         customPointArr: null,
         isMove: false,
         nowMoveLayer: null,
-        oldLayerAttrData: undefined
-
+        oldLayerAttrData: undefined,
+        moveConfirmCenter: null,
+        nowSelectAreaName: null
     }),
     getters: {},
     persist: true,
@@ -42,6 +43,12 @@ export const useArcGisStore = defineStore("useArcGisStore", {
         },
         setOldLayerAttrData(data: SinglePointItem | undefined) {
             this.oldLayerAttrData = data
+        },
+        setMoveConfirmCenter(center: [number, number] | null) {
+            this.moveConfirmCenter = center
+        },
+        setNowSelectAreaName(name: number | null) {
+            this.nowSelectAreaName = name
         }
 
     },

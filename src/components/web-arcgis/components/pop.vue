@@ -127,6 +127,8 @@ onBeforeUnmount(() => {
     box-shadow: 5px 3px 10px 1px rgba(128, 128, 128, 0.566);
     background-color: rgba(255, 255, 255, 0.661);
     backdrop-filter: blur(10px);
+    // 移动端模糊
+    -webkit-backdrop-filter: blur(10px);
     overflow: hidden;
 
     .pop_header {
